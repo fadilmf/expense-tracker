@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
+  manifest: "/manifest.json",
   title: "Login to Expense Tracker",
   description: "Expense Tracker",
 };
