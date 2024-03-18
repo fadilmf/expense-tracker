@@ -33,15 +33,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { auth } from "@/lib/firebaseClient";
+import { auth, db } from "@/lib/firebaseClient";
 import { useAddExpense } from "@/lib/useAddExpense";
-import { useGetExpenses } from "@/lib/useGetExpenses";
 import { useGetUserInfo } from "@/lib/useGetUserInfo";
 
 import { rupiahFormatter } from "@/lib/utils";
 import { signOut } from "firebase/auth";
+import {
+  Timestamp,
+  collection,
+  onSnapshot,
+  orderBy,
+  query,
+  where,
+} from "firebase/firestore";
 import { CalendarIcon, Plus } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -49,8 +57,16 @@ export default function Home() {
   const router = useRouter();
   const { isAuth } = useGetUserInfo();
 
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [expenseTotal, setExpenseTotal] = useState(0);
+
+  const expenseCollectionRef = collection(db, "expenses");
+  const { userID } = useGetUserInfo();
+
+  const currentMonth = new Date().getMonth() + 1;
+  const currentYear = new Date().getFullYear();
+
   const { addExpense } = useAddExpense();
-  const { expenses, expenseTotal } = useGetExpenses();
 
   const [description, setDescription] = useState("");
   const [expenseAmount, setExpenseAmount] = useState(0);
@@ -59,23 +75,73 @@ export default function Home() {
 
   const { name, profilePhoto } = useGetUserInfo();
 
+  const getExpenses = async (selectedMonth: any, selectedYear: any) => {
+    let unsubscribe: any;
+
+    try {
+      const startOfMonth = new Date(selectedYear, selectedMonth - 1, 1);
+      // startOfMonth.setDate(1);
+      // startOfMonth.setHours(0, 0, 0, 0);
+      const endOfMonth = new Date(
+        selectedYear,
+        selectedMonth,
+        0,
+        23,
+        59,
+        59,
+        999
+      );
+
+      const queryExpenses = query(
+        expenseCollectionRef,
+        where("userID", "==", userID),
+        where("createdAt", ">=", Timestamp.fromDate(startOfMonth)),
+        where("createdAt", "<=", Timestamp.fromDate(endOfMonth)),
+        orderBy("createdAt", "desc")
+      );
+
+      unsubscribe = onSnapshot(queryExpenses, (snapshot) => {
+        let docs: any[] = [];
+        let totalExpense = 0;
+
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          const id = doc.id;
+
+          docs.push({ ...data, id });
+
+          totalExpense += data.expenseAmount;
+        });
+
+        setExpenses(docs);
+        setExpenseTotal(Number(totalExpense));
+      });
+    } catch (error) {
+      console.error(error);
+    }
+
+    return () => unsubscribe();
+  };
+
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     addExpense({ description, expenseAmount });
     setIsDialogOpen(false);
+    getExpenses(currentMonth, currentYear);
   };
 
   useEffect(() => {
     if (!isAuth) {
       router.push("/auth");
     }
+    getExpenses(currentMonth, currentYear);
   });
   return (
     <>
       <div className="container">
         <div className="fixed bottom-5 right-5">
-          <Dialog>
-            <DialogTrigger>
+          <Dialog open={isDialogOpen} onOpenChange={(o) => setIsDialogOpen(o)}>
+            <DialogTrigger asChild>
               <Button className="py-7 rounded-full">
                 <Plus />
               </Button>
@@ -103,6 +169,7 @@ export default function Home() {
                   </label>
                   <Input
                     id="expenseAmount"
+                    type="number"
                     placeholder="berapa"
                     className="col-span-3"
                     onChange={(e) => setExpenseAmount(Number(e.target.value))}
@@ -110,7 +177,13 @@ export default function Home() {
                 </div>
               </div>
               <DialogFooter>
-                <Button type="submit" onClick={onSubmit}>
+                <Button
+                  type="submit"
+                  onClick={onSubmit}
+                  disabled={
+                    description.trim().length <= 0 || expenseAmount === 0
+                  }
+                >
                   Tambah
                 </Button>
               </DialogFooter>
@@ -137,28 +210,42 @@ export default function Home() {
             </CardContent>
           </Card>
         </div>
-        {/* <div className="mb-4">
-          <Card>
-            <CardHeader>
-              <h1 className="font-semibold">Kategori Pengeluaran Terbesar</h1>
-            </CardHeader>
-            <CardContent>
-              <ul>
-                <li>Nabung</li>
-                <li>Nabung</li>
-                <li>Nabung</li>
-              </ul>
-            </CardContent>
-          </Card>
-        </div> */}
         <div className="mb-4">
-          <Card>
-            <CardHeader>
-              <h1 className="font-semibold">History</h1>
-            </CardHeader>
+          <div className="flex justify-between mb-4">
+            <h1 className="font-semibold">Recent Transactions</h1>
+            <h1 className="text-blue-500 hover:underline">
+              <Link href="/expenses">View all</Link>
+            </h1>
+          </div>
+          <ul>
+            {expenses.slice(0, 5).map((expense, index) => {
+              const { description, expenseAmount, createdAt } = expense;
+              return (
+                <li key={index} className="mb-1">
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-lg font-semibold w-32 sm:w-52">
+                          {description}
+                        </h4>
+                        <p>{rupiahFormatter(expenseAmount)}</p>
+                      </div>
+                    </CardHeader>
+                    <CardFooter>
+                      <p>
+                        {new Date(createdAt?.seconds * 1000).toDateString()}
+                      </p>
+                    </CardFooter>
+                  </Card>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* <Card>
             <CardContent>
               <ul>
-                {expenses.map((expense, index) => {
+                {expenses.slice(0, 5).map((expense, index) => {
                   const { description, expenseAmount } = expense;
                   return (
                     <li key={index} className="py-4">
@@ -172,8 +259,13 @@ export default function Home() {
                   );
                 })}
               </ul>
+              {expenses.length > 5 && (
+                <div className="text-blue-500 hover:underline">
+                  <Link href="/expenses">...Pengeluaran yang lain</Link>
+                </div>
+              )}
             </CardContent>
-          </Card>
+          </Card> */}
         </div>
       </div>
     </>
