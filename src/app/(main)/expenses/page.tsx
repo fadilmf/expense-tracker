@@ -133,16 +133,21 @@ export default function ExpensesPage() {
           </Select>
         </div>
 
-        <h1 className="font-bold text-2xl">
-          {new Date(Number(year) + "/" + Number(month)).toLocaleString(
-            "default",
-            {
-              month: "long",
-            }
-          ) +
-            " " +
-            year}
-        </h1>
+        <div className="my-3">
+          <h1 className="font-bold text-2xl">
+            {new Date(Number(year) + "/" + Number(month)).toLocaleString(
+              "default",
+              {
+                month: "long",
+              }
+            ) +
+              " " +
+              year}
+          </h1>
+          <h1 className="font-extrabold text-3xl">
+            Total {rupiahFormatter(expenseTotal)}
+          </h1>
+        </div>
         <div className="mb-4">
           <ul>
             {expenses.map((expense, index) => {
